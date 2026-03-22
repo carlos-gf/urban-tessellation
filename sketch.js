@@ -37,6 +37,7 @@ const layers = [
     snd: null,
     enabled: true,
     tessDivisions: 24,
+    tessDirection: 1,
     squareImg: null,
     tessImg: null,
     weight: 0,
@@ -59,6 +60,7 @@ const layers = [
     snd: null,
     enabled: true,
     tessDivisions: 18,
+    tessDirection: 1,
     squareImg: null,
     tessImg: null,
     weight: 0,
@@ -81,6 +83,7 @@ const layers = [
     snd: null,
     enabled: true,
     tessDivisions: 32,
+    tessDirection: 1,
     squareImg: null,
     tessImg: null,
     weight: 0,
@@ -103,6 +106,7 @@ const layers = [
     snd: null,
     enabled: true,
     tessDivisions: 40,
+    tessDirection: 1,
     squareImg: null,
     tessImg: null,
     weight: 0,
@@ -125,6 +129,7 @@ const layers = [
     snd: null,
     enabled: true,
     tessDivisions: 14,
+    tessDirection: 1,
     squareImg: null,
     tessImg: null,
     weight: 0,
@@ -147,6 +152,7 @@ const layers = [
     snd: null,
     enabled: true,
     tessDivisions: 22,
+    tessDirection: 1,
     squareImg: null,
     tessImg: null,
     weight: 0,
@@ -425,17 +431,24 @@ function updateAutonomousMode() {
 
   if (now - lastAutoTessMs >= nextAutoTessMs) {
     const activeLayers = getActiveLayers();
+    const stepSize = 4;
 
     for (const layer of activeLayers) {
       const chance = map(layer.weight, 0, 1, 0.25, 1.0);
 
       if (random() < chance) {
-        const deltas = [-14, -12, -10, -8, 8, 10, 12, 14];
-        const delta = random(deltas);
-
-        layer.tessDivisions += delta;
+        layer.tessDivisions += stepSize * layer.tessDirection;
         layer.tessDivisions = Math.floor(layer.tessDivisions / 2) * 2;
-        layer.tessDivisions = constrain(layer.tessDivisions, 4, TESS_MAX);
+
+        if (layer.tessDivisions >= TESS_MAX) {
+          layer.tessDivisions = TESS_MAX;
+          layer.tessDirection = -1;
+        }
+
+        if (layer.tessDivisions <= TESS_MIN) {
+          layer.tessDivisions = TESS_MIN;
+          layer.tessDirection = 1;
+        }
 
         rebuildSingleLayer(layer);
         updateLayerAudioEffects(layer);
@@ -786,13 +799,11 @@ function getBlendGrid() {
   const dominant = getDominantActiveLayer();
 
   if (!dominant) {
-    return { cols: 6, rows: 6 };
+    return { cols: 2, rows: 2 };
   }
 
   const d = constrain(dominant.tessDivisions, TESS_MIN, TESS_MAX);
 
-  // min tessellation -> large collage blocks
-  // max tessellation -> small collage blocks
   const cols = Math.round(map(d, TESS_MIN, TESS_MAX, 2, 24));
   const rows = Math.round(map(d, TESS_MIN, TESS_MAX, 2, 24));
 
