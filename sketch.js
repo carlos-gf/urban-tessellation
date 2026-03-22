@@ -1,5 +1,4 @@
-let container, uiWrap, controlsRow, infoLabel, titleLabel, hintLabel;
-let saveBtn;
+let container, uiWrap, layersPanel, titleLabel, hintLabel, saveBtn;
 let audioStarted = false;
 
 let blendPos = 0;
@@ -7,6 +6,10 @@ let blendStep = 0.04;
 
 let cachedG;
 let dirty = true;
+
+let assetsReady = false;
+let totalAssets = 0;
+let loadedAssets = 0;
 
 // Ordered from structural to organic
 const layers = [
@@ -18,12 +21,14 @@ const layers = [
     img: null,
     snd: null,
     enabled: true,
-    tileScale: 1.45,
     tessDivisions: 24,
     squareImg: null,
     tessImg: null,
     weight: 0,
     volume: 0,
+    row: null,
+    pctLabel: null,
+    tessLabel: null,
     button: null,
     reverb: null,
     delay: null,
@@ -37,12 +42,14 @@ const layers = [
     img: null,
     snd: null,
     enabled: true,
-    tileScale: 1.0,
     tessDivisions: 18,
     squareImg: null,
     tessImg: null,
     weight: 0,
     volume: 0,
+    row: null,
+    pctLabel: null,
+    tessLabel: null,
     button: null,
     reverb: null,
     delay: null,
@@ -56,12 +63,14 @@ const layers = [
     img: null,
     snd: null,
     enabled: true,
-    tileScale: 0.8,
     tessDivisions: 32,
     squareImg: null,
     tessImg: null,
     weight: 0,
     volume: 0,
+    row: null,
+    pctLabel: null,
+    tessLabel: null,
     button: null,
     reverb: null,
     delay: null,
@@ -75,12 +84,14 @@ const layers = [
     img: null,
     snd: null,
     enabled: true,
-    tileScale: 0.65,
     tessDivisions: 40,
     squareImg: null,
     tessImg: null,
     weight: 0,
     volume: 0,
+    row: null,
+    pctLabel: null,
+    tessLabel: null,
     button: null,
     reverb: null,
     delay: null,
@@ -94,12 +105,14 @@ const layers = [
     img: null,
     snd: null,
     enabled: true,
-    tileScale: 0.95,
     tessDivisions: 14,
     squareImg: null,
     tessImg: null,
     weight: 0,
     volume: 0,
+    row: null,
+    pctLabel: null,
+    tessLabel: null,
     button: null,
     reverb: null,
     delay: null,
@@ -113,12 +126,14 @@ const layers = [
     img: null,
     snd: null,
     enabled: true,
-    tileScale: 1.2,
     tessDivisions: 22,
     squareImg: null,
     tessImg: null,
     weight: 0,
     volume: 0,
+    row: null,
+    pctLabel: null,
+    tessLabel: null,
     button: null,
     reverb: null,
     delay: null,
@@ -127,22 +142,33 @@ const layers = [
 ];
 
 function preload() {
+  totalAssets = layers.length * 2;
+
   for (const layer of layers) {
     layer.img = loadImage(
       layer.imagePath,
-      () => {},
+      handleAssetLoaded,
       () => {
         console.warn(`Failed to load image: ${layer.imagePath}`);
+        handleAssetLoaded();
       }
     );
 
     layer.snd = loadSound(
       layer.audioPath,
-      () => {},
+      handleAssetLoaded,
       () => {
         console.warn(`Failed to load audio: ${layer.audioPath}`);
+        handleAssetLoaded();
       }
     );
+  }
+}
+
+function handleAssetLoaded() {
+  loadedAssets++;
+  if (loadedAssets >= totalAssets) {
+    assetsReady = true;
   }
 }
 
@@ -167,11 +193,16 @@ function setup() {
 
   updateWeights();
   updateButtonStyles();
-  updateInfoLabel();
+  updateLayerRows();
 }
 
 function draw() {
   background(255);
+
+  if (!assetsReady) {
+    drawLoadingScreen();
+    return;
+  }
 
   if (dirty) {
     renderComposite();
@@ -185,16 +216,48 @@ function draw() {
   }
 }
 
+function drawLoadingScreen() {
+  background(255);
+
+  const cx = width * 0.5;
+  const cy = height * 0.5 - 10;
+  const r = 22;
+
+  push();
+  translate(cx, cy);
+  noFill();
+  stroke(0);
+  strokeWeight(1);
+
+  circle(0, 0, r * 2);
+
+  const a0 = frameCount * 0.06;
+  const a1 = a0 + PI * 0.55;
+  arc(0, 0, r * 2, r * 2, a0, a1);
+
+  pop();
+
+  noStroke();
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(13);
+  text("Loading...", width * 0.5, cy + 42);
+}
+
 function mousePressed() {
+  if (!assetsReady) return;
   startAudioIfNeeded();
 }
 
 function touchStarted() {
+  if (!assetsReady) return false;
   startAudioIfNeeded();
   return false;
 }
 
 function mouseWheel(event) {
+  if (!assetsReady) return false;
+
   const active = getActiveLayers();
   if (active.length <= 1) return false;
 
@@ -204,13 +267,15 @@ function mouseWheel(event) {
 
   updateWeights();
   updateAudioMix();
-  updateInfoLabel();
+  updateLayerRows();
   markDirty();
 
   return false;
 }
 
 function keyPressed() {
+  if (!assetsReady) return;
+
   const active = getActiveLayers();
   const count = active.length;
 
@@ -224,12 +289,10 @@ function keyPressed() {
       adjustDominantLayerTessellation(2);
       return;
     }
-
     if (keyCode === LEFT_ARROW) {
       adjustDominantLayerTessellation(-2);
       return;
     }
-
     return;
   }
 
@@ -248,7 +311,7 @@ function keyPressed() {
     blendPos = wrapBlendPos(blendPos, count);
     updateWeights();
     updateAudioMix();
-    updateInfoLabel();
+    updateLayerRows();
     markDirty();
     return;
   }
@@ -258,7 +321,7 @@ function keyPressed() {
     blendPos = wrapBlendPos(blendPos, count);
     updateWeights();
     updateAudioMix();
-    updateInfoLabel();
+    updateLayerRows();
     markDirty();
     return;
   }
@@ -285,18 +348,18 @@ function setupContainer() {
   container.parent(document.body);
   container.style("display", "flex");
   container.style("align-items", "center");
-  container.style("gap", "14px");
+  container.style("gap", "18px");
   container.elt.appendChild(document.querySelector("canvas"));
 }
 
 function applyResponsiveLayout() {
   const isHorizontal = window.innerWidth >= window.innerHeight;
   const pad = 16;
-  const gap = 14;
+  const gap = 18;
   let canvasSide;
 
   if (isHorizontal) {
-    const uiW = Math.min(300, Math.floor(window.innerWidth * 0.34));
+    const uiW = Math.min(340, Math.floor(window.innerWidth * 0.34));
     canvasSide = Math.min(
       window.innerHeight - pad * 2,
       window.innerWidth - uiW - gap - pad * 2
@@ -304,7 +367,7 @@ function applyResponsiveLayout() {
     container.style("flex-direction", "row");
     uiWrap.style("width", uiW + "px");
   } else {
-    const uiH = 280;
+    const uiH = 330;
     canvasSide = Math.min(
       window.innerWidth - pad * 2,
       window.innerHeight - uiH - gap - pad * 2
@@ -329,32 +392,50 @@ function setupUI() {
   uiWrap.parent(container);
   uiWrap.style("display", "flex");
   uiWrap.style("flex-direction", "column");
-  uiWrap.style("gap", "10px");
-  uiWrap.style("align-items", "center");
+  uiWrap.style("gap", "12px");
+  uiWrap.style("align-items", "stretch");
 
   titleLabel = createDiv("Urban Tessellation");
   titleLabel.parent(uiWrap);
   titleLabel.style("font-size", "18px");
   titleLabel.style("font-weight", "bold");
-  titleLabel.style("text-align", "center");
+  titleLabel.style("text-align", "left");
 
-  hintLabel = createDiv("Toggle strata. Scroll or use up/down to shift the blend. Left/right arrows change tessellation.");
+  hintLabel = createDiv("Scroll or use up/down to shift the blend. Left/right arrows change tessellation.");
   hintLabel.parent(uiWrap);
-  hintLabel.style("font-size", "13px");
-  hintLabel.style("text-align", "center");
-  hintLabel.style("line-height", "1.4");
+  hintLabel.style("font-size", "12px");
+  hintLabel.style("line-height", "1.45");
+  hintLabel.style("text-align", "left");
 
-  controlsRow = createDiv();
-  controlsRow.parent(uiWrap);
-  controlsRow.style("display", "flex");
-  controlsRow.style("gap", "8px");
-  controlsRow.style("flex-wrap", "wrap");
-  controlsRow.style("justify-content", "center");
+  layersPanel = createDiv();
+  layersPanel.parent(uiWrap);
+  layersPanel.style("display", "flex");
+  layersPanel.style("flex-direction", "column");
+  layersPanel.style("gap", "6px");
 
   for (const layer of layers) {
+    const row = createDiv();
+    row.parent(layersPanel);
+    row.style("display", "grid");
+    row.style("grid-template-columns", "48px 42px 1fr");
+    row.style("gap", "8px");
+    row.style("align-items", "center");
+
+    const pct = createDiv("0%");
+    pct.parent(row);
+    pct.style("font-size", "12px");
+    pct.style("text-align", "right");
+
+    const tess = createDiv(String(layer.tessDivisions));
+    tess.parent(row);
+    tess.style("font-size", "12px");
+    tess.style("text-align", "right");
+
     const btn = createButton(layer.label);
-    btn.parent(controlsRow);
+    btn.parent(row);
     styleControl(btn);
+    btn.style("text-align", "left");
+    btn.style("width", "100%");
 
     btn.mousePressed(() => {
       layer.enabled = !layer.enabled;
@@ -368,26 +449,23 @@ function setupUI() {
       updateWeights();
       updateButtonStyles();
       updateAudioMix();
-      updateInfoLabel();
+      updateLayerRows();
       markDirty();
     });
 
+    layer.row = row;
+    layer.pctLabel = pct;
+    layer.tessLabel = tess;
     layer.button = btn;
   }
 
   saveBtn = createButton("Save");
   saveBtn.parent(uiWrap);
   styleControl(saveBtn);
+  saveBtn.style("align-self", "flex-start");
   saveBtn.mousePressed(() => {
     saveCanvas(cachedG, "urban_tessellation", "png");
   });
-
-  infoLabel = createDiv("");
-  infoLabel.parent(uiWrap);
-  infoLabel.style("font-size", "13px");
-  infoLabel.style("text-align", "center");
-  infoLabel.style("line-height", "1.5");
-  infoLabel.style("max-width", "100%");
 }
 
 function styleControl(el) {
@@ -405,10 +483,38 @@ function styleControl(el) {
 /* ---------------- Layer state ---------------- */
 
 function updateButtonStyles() {
+  const dominant = getDominantActiveLayer();
+
   for (const layer of layers) {
     layer.button.style("background", layer.enabled ? "#000" : "#fff");
     layer.button.style("color", layer.enabled ? "#fff" : "#000");
+
+    if (dominant && dominant.id === layer.id) {
+      layer.row.style("font-weight", "bold");
+    } else {
+      layer.row.style("font-weight", "normal");
+    }
   }
+}
+
+function updateLayerRows() {
+  const dominant = getDominantActiveLayer();
+
+  for (const layer of layers) {
+    const pct = Math.round(layer.weight * 100);
+    layer.pctLabel.html(`${pct}%`);
+    layer.tessLabel.html(String(layer.tessDivisions));
+
+    if (dominant && dominant.id === layer.id) {
+      layer.pctLabel.style("font-weight", "bold");
+      layer.tessLabel.style("font-weight", "bold");
+    } else {
+      layer.pctLabel.style("font-weight", "normal");
+      layer.tessLabel.style("font-weight", "normal");
+    }
+  }
+
+  updateButtonStyles();
 }
 
 function getActiveLayers() {
@@ -476,7 +582,7 @@ function adjustDominantLayerTessellation(delta) {
 
   rebuildSingleLayer(layer);
   updateLayerAudioEffects(layer);
-  updateInfoLabel();
+  updateLayerRows();
   markDirty();
 }
 
@@ -485,29 +591,6 @@ function rebuildSingleLayer(layer) {
 
   layer.squareImg = cropCenterSquare(layer.img);
   layer.tessImg = buildLayerTessellation(layer.squareImg, layer.tessDivisions);
-}
-
-function updateInfoLabel() {
-  const active = getActiveLayers();
-  if (active.length === 0) {
-    infoLabel.html("No active strata");
-    return;
-  }
-
-  const dominant = getDominantActiveLayer();
-
-  let text = "";
-  if (dominant) {
-    text += `Editing: ${dominant.label}<br>`;
-    text += `Tessellation: ${dominant.tessDivisions}<br><br>`;
-  }
-
-  const lines = active.map(layer => {
-    const pct = Math.round(layer.weight * 100);
-    return `${layer.label}: ${pct}%`;
-  });
-
-  infoLabel.html(text + lines.join("<br>"));
 }
 
 function getBlendGrid() {
@@ -520,10 +603,7 @@ function getBlendGrid() {
   let d = Math.max(2, dominant.tessDivisions || 2);
   d = constrain(d, 6, 36);
 
-  return {
-    cols: d,
-    rows: d
-  };
+  return { cols: d, rows: d };
 }
 
 /* ---------------- Rendering ---------------- */
@@ -592,7 +672,6 @@ function drawLayerTile(g, layer, gx, gy, cellW, cellH, blendCols, blendRows) {
 function buildAllLayerTessellations() {
   for (const layer of layers) {
     if (!layer.img) continue;
-
     layer.squareImg = cropCenterSquare(layer.img);
     layer.tessImg = buildLayerTessellation(layer.squareImg, layer.tessDivisions);
   }
@@ -601,18 +680,12 @@ function buildAllLayerTessellations() {
 function buildLayerTessellation(img, divisions) {
   const base = fitSquareImage(img, width);
 
-  if (divisions <= 0) {
-    return base;
-  }
-
-  if (divisions === 2) {
-    return renderMirroredSquare(base);
-  }
+  if (divisions <= 0) return base;
+  if (divisions === 2) return renderMirroredSquare(base);
 
   const mirrored = renderMirroredSquare(base);
   const v = reorderVerticalStripes(mirrored, divisions);
-  const out = reorderHorizontalStripes(v, divisions);
-  return out;
+  return reorderHorizontalStripes(v, divisions);
 }
 
 function fitSquareImage(img, side) {
@@ -711,7 +784,6 @@ function reorderVerticalStripes(src, n) {
     const x0 = round(id * src.width / n);
     const x1 = round((id + 1) * src.width / n);
     const w = max(1, x1 - x0);
-
     g.copy(src, x0, 0, w, src.height, dx, 0, w, src.height);
     dx += w;
   }
@@ -732,7 +804,6 @@ function reorderHorizontalStripes(src, n) {
     const y0 = round(id * src.height / n);
     const y1 = round((id + 1) * src.height / n);
     const h = max(1, y1 - y0);
-
     g.copy(src, 0, y0, src.width, h, 0, dy, src.width, h);
     dy += h;
   }
