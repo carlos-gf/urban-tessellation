@@ -15,6 +15,9 @@ let assetsReady = false;
 let totalAssets = 0;
 let loadedAssets = 0;
 
+const TESS_MIN = 0;
+const TESS_MAX = 80;
+
 // autonomous mode timing
 let lastAutoMs = 0;
 let lastAutoTessMs = 0;
@@ -42,7 +45,7 @@ const layers = [
     buttonWrap: null,
     fillBar: null,
     labelDiv: null,
-    tessLabel: null,
+    tessInput: null,
     reverb: null,
     delay: null,
     filter: null
@@ -64,7 +67,7 @@ const layers = [
     buttonWrap: null,
     fillBar: null,
     labelDiv: null,
-    tessLabel: null,
+    tessInput: null,
     reverb: null,
     delay: null,
     filter: null
@@ -86,7 +89,7 @@ const layers = [
     buttonWrap: null,
     fillBar: null,
     labelDiv: null,
-    tessLabel: null,
+    tessInput: null,
     reverb: null,
     delay: null,
     filter: null
@@ -108,7 +111,7 @@ const layers = [
     buttonWrap: null,
     fillBar: null,
     labelDiv: null,
-    tessLabel: null,
+    tessInput: null,
     reverb: null,
     delay: null,
     filter: null
@@ -130,7 +133,7 @@ const layers = [
     buttonWrap: null,
     fillBar: null,
     labelDiv: null,
-    tessLabel: null,
+    tessInput: null,
     reverb: null,
     delay: null,
     filter: null
@@ -152,7 +155,7 @@ const layers = [
     buttonWrap: null,
     fillBar: null,
     labelDiv: null,
-    tessLabel: null,
+    tessInput: null,
     reverb: null,
     delay: null,
     filter: null
@@ -256,14 +259,14 @@ function drawLoadingScreen() {
   background(255);
 
   const cx = width * 0.5;
-  const cy = height * 0.5 - 6;
-  const r = 18;
+  const cy = height * 0.5 - 8;
+  const r = 34;
 
   push();
   translate(cx, cy);
   noFill();
   stroke(0);
-  strokeWeight(1);
+  strokeWeight(1.5);
 
   circle(0, 0, r * 2);
 
@@ -276,8 +279,8 @@ function drawLoadingScreen() {
   noStroke();
   fill(0);
   textAlign(CENTER, CENTER);
-  textSize(13);
-  text("Loading...", width * 0.5, cy + 38);
+  textSize(14);
+  text("Loading...", width * 0.5, cy + 56);
 }
 
 function mousePressed() {
@@ -427,12 +430,12 @@ function updateAutonomousMode() {
       const chance = map(layer.weight, 0, 1, 0.25, 1.0);
 
       if (random() < chance) {
-        const deltas = [-10, -8, -6, 6, 8, 10];
+        const deltas = [-14, -12, -10, -8, 8, 10, 12, 14];
         const delta = random(deltas);
 
         layer.tessDivisions += delta;
         layer.tessDivisions = Math.floor(layer.tessDivisions / 2) * 2;
-        layer.tessDivisions = constrain(layer.tessDivisions, 4, 44);
+        layer.tessDivisions = constrain(layer.tessDivisions, 4, TESS_MAX);
 
         rebuildSingleLayer(layer);
         updateLayerAudioEffects(layer);
@@ -473,7 +476,7 @@ function applyResponsiveLayout() {
   let canvasSide;
 
   if (isHorizontal) {
-    const uiW = Math.min(360, Math.floor(window.innerWidth * 0.36));
+    const uiW = Math.min(380, Math.floor(window.innerWidth * 0.38));
     canvasSide = Math.min(
       window.innerHeight - pad * 2,
       window.innerWidth - uiW - gap - pad * 2
@@ -481,7 +484,7 @@ function applyResponsiveLayout() {
     container.style("flex-direction", "row");
     uiWrap.style("width", uiW + "px");
   } else {
-    const uiH = 340;
+    const uiH = 360;
     canvasSide = Math.min(
       window.innerWidth - pad * 2,
       window.innerHeight - uiH - gap - pad * 2
@@ -531,7 +534,7 @@ function setupUI() {
     const row = createDiv();
     row.parent(layersPanel);
     row.style("display", "grid");
-    row.style("grid-template-columns", "1fr 46px");
+    row.style("grid-template-columns", "1fr 58px");
     row.style("gap", "8px");
     row.style("align-items", "center");
 
@@ -569,10 +572,48 @@ function setupUI() {
     labelDiv.style("color", "#fff");
     labelDiv.style("mix-blend-mode", "difference");
 
-    const tessLabel = createDiv(String(layer.tessDivisions));
-    tessLabel.parent(row);
-    tessLabel.style("font-size", "12px");
-    tessLabel.style("text-align", "right");
+    const tessInput = createInput(String(layer.tessDivisions), "number");
+    tessInput.parent(row);
+    tessInput.style("height", "38px");
+    tessInput.style("box-sizing", "border-box");
+    tessInput.style("border", "1px solid #000");
+    tessInput.style("padding", "0 8px");
+    tessInput.style("font-size", "12px");
+    tessInput.style("text-align", "center");
+    tessInput.style("border-radius", "0");
+    tessInput.style("background", "#fff");
+    tessInput.attribute("min", TESS_MIN);
+    tessInput.attribute("max", TESS_MAX);
+    tessInput.attribute("step", 2);
+
+    const applyTessFromInput = () => {
+      let v = parseInt(tessInput.value(), 10);
+      if (Number.isNaN(v)) v = layer.tessDivisions;
+      v = constrain(v, TESS_MIN, TESS_MAX);
+      v = Math.floor(v / 2) * 2;
+
+      layer.tessDivisions = v;
+      tessInput.value(String(v));
+
+      if (assetsReady) {
+        rebuildSingleLayer(layer);
+        updateLayerAudioEffects(layer);
+        updateLayerRows();
+        markDirty();
+      }
+    };
+
+    tessInput.elt.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        applyTessFromInput();
+        tessInput.elt.blur();
+      }
+    });
+
+    tessInput.elt.addEventListener("blur", () => {
+      applyTessFromInput();
+    });
 
     buttonWrap.mousePressed(() => {
       layer.enabled = !layer.enabled;
@@ -593,7 +634,7 @@ function setupUI() {
     layer.buttonWrap = buttonWrap;
     layer.fillBar = fillBar;
     layer.labelDiv = labelDiv;
-    layer.tessLabel = tessLabel;
+    layer.tessInput = tessInput;
   }
 
   bottomControlsRow = createDiv();
@@ -649,15 +690,17 @@ function updateLayerRows() {
     const pct = layer.enabled ? Math.round(layer.weight * 100) : 0;
 
     layer.fillBar.style("width", `${pct}%`);
-    layer.tessLabel.html(String(layer.tessDivisions));
-
     layer.row.style("opacity", layer.enabled ? "1" : "0.45");
     layer.buttonWrap.style("border", dominant && dominant.id === layer.id ? "2px solid #000" : "1px solid #000");
 
+    if (layer.tessInput && document.activeElement !== layer.tessInput.elt) {
+      layer.tessInput.value(String(layer.tessDivisions));
+    }
+
     if (dominant && dominant.id === layer.id) {
-      layer.tessLabel.style("font-weight", "bold");
+      layer.tessInput.style("font-weight", "bold");
     } else {
-      layer.tessLabel.style("font-weight", "normal");
+      layer.tessInput.style("font-weight", "normal");
     }
   }
 }
@@ -722,8 +765,9 @@ function adjustDominantLayerTessellation(delta) {
   const layer = getDominantActiveLayer();
   if (!layer) return;
 
-  layer.tessDivisions = Math.max(0, layer.tessDivisions + delta);
+  layer.tessDivisions = Math.max(TESS_MIN, layer.tessDivisions + delta);
   layer.tessDivisions = Math.floor(layer.tessDivisions / 2) * 2;
+  layer.tessDivisions = constrain(layer.tessDivisions, TESS_MIN, TESS_MAX);
 
   rebuildSingleLayer(layer);
   updateLayerAudioEffects(layer);
@@ -742,13 +786,17 @@ function getBlendGrid() {
   const dominant = getDominantActiveLayer();
 
   if (!dominant) {
-    return { cols: 12, rows: 12 };
+    return { cols: 6, rows: 6 };
   }
 
-  let d = Math.max(2, dominant.tessDivisions || 2);
-  d = constrain(d, 6, 36);
+  const d = constrain(dominant.tessDivisions, TESS_MIN, TESS_MAX);
 
-  return { cols: d, rows: d };
+  // min tessellation -> large collage blocks
+  // max tessellation -> small collage blocks
+  const cols = Math.round(map(d, TESS_MIN, TESS_MAX, 6, 80));
+  const rows = Math.round(map(d, TESS_MIN, TESS_MAX, 6, 80));
+
+  return { cols, rows };
 }
 
 /* ---------------- Rendering ---------------- */
@@ -977,7 +1025,7 @@ function setupAudioEffects() {
 }
 
 function normalizeTessellation(divisions) {
-  return constrain(map(divisions, 0, 40, 0, 1), 0, 1);
+  return constrain(map(divisions, TESS_MIN, TESS_MAX, 0, 1), 0, 1);
 }
 
 function updateLayerAudioEffects(layer) {
