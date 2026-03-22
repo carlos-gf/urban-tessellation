@@ -27,9 +27,10 @@ const layers = [
     weight: 0,
     volume: 0,
     row: null,
-    pctLabel: null,
+    buttonWrap: null,
+    fillBar: null,
+    labelDiv: null,
     tessLabel: null,
-    button: null,
     reverb: null,
     delay: null,
     filter: null
@@ -48,9 +49,10 @@ const layers = [
     weight: 0,
     volume: 0,
     row: null,
-    pctLabel: null,
+    buttonWrap: null,
+    fillBar: null,
+    labelDiv: null,
     tessLabel: null,
-    button: null,
     reverb: null,
     delay: null,
     filter: null
@@ -69,9 +71,10 @@ const layers = [
     weight: 0,
     volume: 0,
     row: null,
-    pctLabel: null,
+    buttonWrap: null,
+    fillBar: null,
+    labelDiv: null,
     tessLabel: null,
-    button: null,
     reverb: null,
     delay: null,
     filter: null
@@ -90,9 +93,10 @@ const layers = [
     weight: 0,
     volume: 0,
     row: null,
-    pctLabel: null,
+    buttonWrap: null,
+    fillBar: null,
+    labelDiv: null,
     tessLabel: null,
-    button: null,
     reverb: null,
     delay: null,
     filter: null
@@ -111,9 +115,10 @@ const layers = [
     weight: 0,
     volume: 0,
     row: null,
-    pctLabel: null,
+    buttonWrap: null,
+    fillBar: null,
+    labelDiv: null,
     tessLabel: null,
-    button: null,
     reverb: null,
     delay: null,
     filter: null
@@ -132,45 +137,15 @@ const layers = [
     weight: 0,
     volume: 0,
     row: null,
-    pctLabel: null,
+    buttonWrap: null,
+    fillBar: null,
+    labelDiv: null,
     tessLabel: null,
-    button: null,
     reverb: null,
     delay: null,
     filter: null
   }
 ];
-
-function preload() {
-  totalAssets = layers.length * 2;
-
-  for (const layer of layers) {
-    layer.img = loadImage(
-      layer.imagePath,
-      handleAssetLoaded,
-      () => {
-        console.warn(`Failed to load image: ${layer.imagePath}`);
-        handleAssetLoaded();
-      }
-    );
-
-    layer.snd = loadSound(
-      layer.audioPath,
-      handleAssetLoaded,
-      () => {
-        console.warn(`Failed to load audio: ${layer.audioPath}`);
-        handleAssetLoaded();
-      }
-    );
-  }
-}
-
-function handleAssetLoaded() {
-  loadedAssets++;
-  if (loadedAssets >= totalAssets) {
-    assetsReady = true;
-  }
-}
 
 function setup() {
   createCanvas(900, 900);
@@ -188,12 +163,10 @@ function setup() {
   const cnv = document.querySelector("canvas");
   cnv.style.touchAction = "none";
 
-  buildAllLayerTessellations();
-  setupAudioEffects();
-
   updateWeights();
-  updateButtonStyles();
   updateLayerRows();
+
+  beginAssetLoading();
 }
 
 function draw() {
@@ -216,12 +189,57 @@ function draw() {
   }
 }
 
+function beginAssetLoading() {
+  totalAssets = layers.length * 2;
+  loadedAssets = 0;
+  assetsReady = false;
+
+  for (const layer of layers) {
+    loadImage(
+      layer.imagePath,
+      (img) => {
+        layer.img = img;
+        handleAssetLoaded();
+      },
+      () => {
+        console.warn(`Failed to load image: ${layer.imagePath}`);
+        handleAssetLoaded();
+      }
+    );
+
+    loadSound(
+      layer.audioPath,
+      (snd) => {
+        layer.snd = snd;
+        handleAssetLoaded();
+      },
+      () => {
+        console.warn(`Failed to load audio: ${layer.audioPath}`);
+        handleAssetLoaded();
+      }
+    );
+  }
+}
+
+function handleAssetLoaded() {
+  loadedAssets++;
+
+  if (loadedAssets >= totalAssets && !assetsReady) {
+    assetsReady = true;
+    buildAllLayerTessellations();
+    setupAudioEffects();
+    updateWeights();
+    updateLayerRows();
+    markDirty();
+  }
+}
+
 function drawLoadingScreen() {
   background(255);
 
   const cx = width * 0.5;
-  const cy = height * 0.5 - 10;
-  const r = 22;
+  const cy = height * 0.5 - 6;
+  const r = 18;
 
   push();
   translate(cx, cy);
@@ -231,7 +249,7 @@ function drawLoadingScreen() {
 
   circle(0, 0, r * 2);
 
-  const a0 = frameCount * 0.06;
+  const a0 = frameCount * 0.07;
   const a1 = a0 + PI * 0.55;
   arc(0, 0, r * 2, r * 2, a0, a1);
 
@@ -241,7 +259,7 @@ function drawLoadingScreen() {
   fill(0);
   textAlign(CENTER, CENTER);
   textSize(13);
-  text("Loading...", width * 0.5, cy + 42);
+  text("Loading...", width * 0.5, cy + 38);
 }
 
 function mousePressed() {
@@ -329,8 +347,11 @@ function keyPressed() {
 
 function windowResized() {
   applyResponsiveLayout();
-  buildAllLayerTessellations();
-  markDirty();
+
+  if (assetsReady) {
+    buildAllLayerTessellations();
+    markDirty();
+  }
 }
 
 /* ---------------- Layout ---------------- */
@@ -359,7 +380,7 @@ function applyResponsiveLayout() {
   let canvasSide;
 
   if (isHorizontal) {
-    const uiW = Math.min(340, Math.floor(window.innerWidth * 0.34));
+    const uiW = Math.min(360, Math.floor(window.innerWidth * 0.36));
     canvasSide = Math.min(
       window.innerHeight - pad * 2,
       window.innerWidth - uiW - gap - pad * 2
@@ -367,7 +388,7 @@ function applyResponsiveLayout() {
     container.style("flex-direction", "row");
     uiWrap.style("width", uiW + "px");
   } else {
-    const uiH = 330;
+    const uiH = 340;
     canvasSide = Math.min(
       window.innerWidth - pad * 2,
       window.innerHeight - uiH - gap - pad * 2
@@ -411,33 +432,56 @@ function setupUI() {
   layersPanel.parent(uiWrap);
   layersPanel.style("display", "flex");
   layersPanel.style("flex-direction", "column");
-  layersPanel.style("gap", "6px");
+  layersPanel.style("gap", "8px");
 
   for (const layer of layers) {
     const row = createDiv();
     row.parent(layersPanel);
     row.style("display", "grid");
-    row.style("grid-template-columns", "48px 42px 1fr");
+    row.style("grid-template-columns", "1fr 46px");
     row.style("gap", "8px");
     row.style("align-items", "center");
 
-    const pct = createDiv("0%");
-    pct.parent(row);
-    pct.style("font-size", "12px");
-    pct.style("text-align", "right");
+    const buttonWrap = createDiv();
+    buttonWrap.parent(row);
+    buttonWrap.style("position", "relative");
+    buttonWrap.style("height", "38px");
+    buttonWrap.style("border", "1px solid #000");
+    buttonWrap.style("background", "#fff");
+    buttonWrap.style("overflow", "hidden");
+    buttonWrap.style("cursor", "pointer");
 
-    const tess = createDiv(String(layer.tessDivisions));
-    tess.parent(row);
-    tess.style("font-size", "12px");
-    tess.style("text-align", "right");
+    const fillBar = createDiv();
+    fillBar.parent(buttonWrap);
+    fillBar.style("position", "absolute");
+    fillBar.style("left", "0");
+    fillBar.style("top", "0");
+    fillBar.style("bottom", "0");
+    fillBar.style("width", "0%");
+    fillBar.style("background", "#000");
 
-    const btn = createButton(layer.label);
-    btn.parent(row);
-    styleControl(btn);
-    btn.style("text-align", "left");
-    btn.style("width", "100%");
+    const labelDiv = createDiv(layer.label);
+    labelDiv.parent(buttonWrap);
+    labelDiv.style("position", "absolute");
+    labelDiv.style("left", "0");
+    labelDiv.style("top", "0");
+    labelDiv.style("width", "100%");
+    labelDiv.style("height", "100%");
+    labelDiv.style("display", "flex");
+    labelDiv.style("align-items", "center");
+    labelDiv.style("justify-content", "center");
+    labelDiv.style("font-size", "13px");
+    labelDiv.style("text-align", "center");
+    labelDiv.style("pointer-events", "none");
+    labelDiv.style("color", "#fff");
+    labelDiv.style("mix-blend-mode", "difference");
 
-    btn.mousePressed(() => {
+    const tessLabel = createDiv(String(layer.tessDivisions));
+    tessLabel.parent(row);
+    tessLabel.style("font-size", "12px");
+    tessLabel.style("text-align", "right");
+
+    buttonWrap.mousePressed(() => {
       layer.enabled = !layer.enabled;
 
       if (getActiveLayers().length === 0) {
@@ -447,28 +491,28 @@ function setupUI() {
       blendPos = wrapBlendPos(blendPos, Math.max(1, getActiveLayers().length));
 
       updateWeights();
-      updateButtonStyles();
       updateAudioMix();
       updateLayerRows();
       markDirty();
     });
 
     layer.row = row;
-    layer.pctLabel = pct;
-    layer.tessLabel = tess;
-    layer.button = btn;
+    layer.buttonWrap = buttonWrap;
+    layer.fillBar = fillBar;
+    layer.labelDiv = labelDiv;
+    layer.tessLabel = tessLabel;
   }
 
   saveBtn = createButton("Save");
   saveBtn.parent(uiWrap);
-  styleControl(saveBtn);
+  styleSimpleButton(saveBtn);
   saveBtn.style("align-self", "flex-start");
   saveBtn.mousePressed(() => {
     saveCanvas(cachedG, "urban_tessellation", "png");
   });
 }
 
-function styleControl(el) {
+function styleSimpleButton(el) {
   el.style("border", "1px solid #000");
   el.style("background", "#fff");
   el.style("color", "#000");
@@ -482,39 +526,24 @@ function styleControl(el) {
 
 /* ---------------- Layer state ---------------- */
 
-function updateButtonStyles() {
-  const dominant = getDominantActiveLayer();
-
-  for (const layer of layers) {
-    layer.button.style("background", layer.enabled ? "#000" : "#fff");
-    layer.button.style("color", layer.enabled ? "#fff" : "#000");
-
-    if (dominant && dominant.id === layer.id) {
-      layer.row.style("font-weight", "bold");
-    } else {
-      layer.row.style("font-weight", "normal");
-    }
-  }
-}
-
 function updateLayerRows() {
   const dominant = getDominantActiveLayer();
 
   for (const layer of layers) {
-    const pct = Math.round(layer.weight * 100);
-    layer.pctLabel.html(`${pct}%`);
+    const pct = layer.enabled ? Math.round(layer.weight * 100) : 0;
+
+    layer.fillBar.style("width", `${pct}%`);
     layer.tessLabel.html(String(layer.tessDivisions));
 
+    layer.row.style("opacity", layer.enabled ? "1" : "0.45");
+    layer.buttonWrap.style("border", dominant && dominant.id === layer.id ? "2px solid #000" : "1px solid #000");
+
     if (dominant && dominant.id === layer.id) {
-      layer.pctLabel.style("font-weight", "bold");
       layer.tessLabel.style("font-weight", "bold");
     } else {
-      layer.pctLabel.style("font-weight", "normal");
       layer.tessLabel.style("font-weight", "normal");
     }
   }
-
-  updateButtonStyles();
 }
 
 function getActiveLayers() {
