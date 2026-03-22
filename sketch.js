@@ -3,7 +3,7 @@ let saveBtn;
 let audioStarted = false;
 
 let blendPos = 0;
-let blendStep = 0.12;
+let blendStep = 0.04;
 
 let cachedG;
 let dirty = true;
@@ -182,7 +182,8 @@ function mouseWheel(event) {
   const active = getActiveLayers();
   if (active.length <= 1) return false;
 
-  blendPos += event.delta > 0 ? blendStep : -blendStep;
+  const direction = event.delta > 0 ? 1 : -1;
+  blendPos += direction * blendStep;
   blendPos = wrapBlendPos(blendPos, active.length);
 
   updateWeights();
@@ -194,11 +195,29 @@ function mouseWheel(event) {
 }
 
 function keyPressed() {
+  const active = getActiveLayers();
+  const count = active.length;
+
   if (key === "s" || key === "S") {
     saveCanvas(cachedG, "urban_tessellation", "png");
     return;
   }
 
+  if (count <= 1) {
+    if (keyCode === RIGHT_ARROW) {
+      adjustDominantLayerTessellation(2);
+      return;
+    }
+
+    if (keyCode === LEFT_ARROW) {
+      adjustDominantLayerTessellation(-2);
+      return;
+    }
+
+    return;
+  }
+
+  // Right / Left adjust tessellation of dominant layer
   if (keyCode === RIGHT_ARROW) {
     adjustDominantLayerTessellation(2);
     return;
@@ -206,6 +225,27 @@ function keyPressed() {
 
   if (keyCode === LEFT_ARROW) {
     adjustDominantLayerTessellation(-2);
+    return;
+  }
+
+  // Down / Up behave like scroll
+  if (keyCode === DOWN_ARROW) {
+    blendPos += blendStep;
+    blendPos = wrapBlendPos(blendPos, count);
+    updateWeights();
+    updateAudioMix();
+    updateInfoLabel();
+    markDirty();
+    return;
+  }
+
+  if (keyCode === UP_ARROW) {
+    blendPos -= blendStep;
+    blendPos = wrapBlendPos(blendPos, count);
+    updateWeights();
+    updateAudioMix();
+    updateInfoLabel();
+    markDirty();
     return;
   }
 }
@@ -284,7 +324,7 @@ function setupUI() {
   titleLabel.style("font-weight", "bold");
   titleLabel.style("text-align", "center");
 
-  hintLabel = createDiv("Toggle strata. Scroll to shift the blend. Left and right arrows change tessellation.");
+  hintLabel = createDiv("Toggle strata. Scroll or use up/down to shift the blend. Left/right arrows change tessellation.");
   hintLabel.parent(uiWrap);
   hintLabel.style("font-size", "13px");
   hintLabel.style("text-align", "center");
