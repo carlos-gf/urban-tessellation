@@ -793,8 +793,8 @@ function getBlendGrid() {
 
   // min tessellation -> large collage blocks
   // max tessellation -> small collage blocks
-  const cols = Math.round(map(d, TESS_MIN, TESS_MAX, 6, 80));
-  const rows = Math.round(map(d, TESS_MIN, TESS_MAX, 6, 80));
+  const cols = Math.round(map(d, TESS_MIN, TESS_MAX, 6, 40));
+  const rows = Math.round(map(d, TESS_MIN, TESS_MAX, 6, 40));
 
   return { cols, rows };
 }
