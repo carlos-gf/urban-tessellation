@@ -1,5 +1,9 @@
-let container, uiWrap, layersPanel, titleLabel, hintLabel, saveBtn;
+let container, uiWrap, layersPanel, titleLabel, hintLabel;
+let bottomControlsRow, muteBtn, autoBtn, saveBtn;
+
 let audioStarted = false;
+let isMuted = false;
+let autoMode = false;
 
 let blendPos = 0;
 let blendStep = 0.04;
@@ -10,6 +14,14 @@ let dirty = true;
 let assetsReady = false;
 let totalAssets = 0;
 let loadedAssets = 0;
+
+// autonomous mode timing
+let lastAutoMs = 0;
+let lastAutoTessMs = 0;
+const autoBlendIntervalMs = 80;
+const autoTessIntervalMin = 1400;
+const autoTessIntervalMax = 2600;
+let nextAutoTessMs = 1800;
 
 // Ordered from structural to organic
 const layers = [
@@ -177,6 +189,10 @@ function draw() {
     return;
   }
 
+  if (autoMode) {
+    updateAutonomousMode();
+  }
+
   if (dirty) {
     renderComposite();
     dirty = false;
@@ -230,6 +246,8 @@ function handleAssetLoaded() {
     setupAudioEffects();
     updateWeights();
     updateLayerRows();
+    updateMuteButton();
+    updateAutoButton();
     markDirty();
   }
 }
@@ -302,6 +320,16 @@ function keyPressed() {
     return;
   }
 
+  if (key === "m" || key === "M") {
+    toggleMute();
+    return;
+  }
+
+  if (key === "a" || key === "A") {
+    toggleAutoMode();
+    return;
+  }
+
   if (count <= 1) {
     if (keyCode === RIGHT_ARROW) {
       adjustDominantLayerTessellation(2);
@@ -351,6 +379,64 @@ function windowResized() {
   if (assetsReady) {
     buildAllLayerTessellations();
     markDirty();
+  }
+}
+
+/* ---------------- Autonomous mode ---------------- */
+
+function toggleAutoMode() {
+  autoMode = !autoMode;
+  updateAutoButton();
+
+  if (autoMode) {
+    lastAutoMs = millis();
+    lastAutoTessMs = millis();
+    nextAutoTessMs = random(autoTessIntervalMin, autoTessIntervalMax);
+  }
+}
+
+function updateAutoButton() {
+  if (!autoBtn) return;
+  autoBtn.html(autoMode ? "Auto On" : "Auto");
+  autoBtn.style("background", autoMode ? "#000" : "#fff");
+  autoBtn.style("color", autoMode ? "#fff" : "#000");
+}
+
+function updateAutonomousMode() {
+  const active = getActiveLayers();
+  if (active.length <= 1) return;
+
+  const now = millis();
+
+  if (now - lastAutoMs >= autoBlendIntervalMs) {
+    blendPos += blendStep * 0.55;
+    blendPos = wrapBlendPos(blendPos, active.length);
+
+    updateWeights();
+    updateAudioMix();
+    updateLayerRows();
+    markDirty();
+
+    lastAutoMs = now;
+  }
+
+  if (now - lastAutoTessMs >= nextAutoTessMs) {
+    const dominant = getDominantActiveLayer();
+    if (dominant) {
+      const deltas = [-4, -2, 2, 4];
+      const delta = random(deltas);
+      dominant.tessDivisions = Math.max(0, dominant.tessDivisions + delta);
+      dominant.tessDivisions = Math.floor(dominant.tessDivisions / 2) * 2;
+      dominant.tessDivisions = constrain(dominant.tessDivisions, 0, 48);
+
+      rebuildSingleLayer(dominant);
+      updateLayerAudioEffects(dominant);
+      updateLayerRows();
+      markDirty();
+    }
+
+    lastAutoTessMs = now;
+    nextAutoTessMs = random(autoTessIntervalMin, autoTessIntervalMax);
   }
 }
 
@@ -503,13 +589,36 @@ function setupUI() {
     layer.tessLabel = tessLabel;
   }
 
+  bottomControlsRow = createDiv();
+  bottomControlsRow.parent(uiWrap);
+  bottomControlsRow.style("display", "flex");
+  bottomControlsRow.style("gap", "8px");
+  bottomControlsRow.style("align-items", "center");
+  bottomControlsRow.style("justify-content", "flex-start");
+
+  muteBtn = createButton("Mute");
+  muteBtn.parent(bottomControlsRow);
+  styleSimpleButton(muteBtn);
+  muteBtn.mousePressed(() => {
+    toggleMute();
+  });
+
+  autoBtn = createButton("Auto");
+  autoBtn.parent(bottomControlsRow);
+  styleSimpleButton(autoBtn);
+  autoBtn.mousePressed(() => {
+    toggleAutoMode();
+  });
+
   saveBtn = createButton("Save");
-  saveBtn.parent(uiWrap);
+  saveBtn.parent(bottomControlsRow);
   styleSimpleButton(saveBtn);
-  saveBtn.style("align-self", "flex-start");
   saveBtn.mousePressed(() => {
     saveCanvas(cachedG, "urban_tessellation", "png");
   });
+
+  updateMuteButton();
+  updateAutoButton();
 }
 
 function styleSimpleButton(el) {
@@ -899,14 +1008,30 @@ function startAudioIfNeeded() {
 
   audioStarted = true;
   updateAudioMix();
+  updateMuteButton();
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  updateAudioMix();
+  updateMuteButton();
+}
+
+function updateMuteButton() {
+  if (!muteBtn) return;
+  muteBtn.html(isMuted ? "Unmute" : "Mute");
+  muteBtn.style("background", isMuted ? "#000" : "#fff");
+  muteBtn.style("color", isMuted ? "#fff" : "#000");
 }
 
 function updateAudioMix() {
   if (!audioStarted) return;
 
+  const globalFactor = isMuted ? 0 : 1;
+
   for (const layer of layers) {
     if (!layer.snd) continue;
-    const target = layer.enabled ? layer.volume : 0;
+    const target = layer.enabled ? layer.volume * globalFactor : 0;
     layer.snd.setVolume(target, 0.2);
   }
 }
