@@ -498,9 +498,6 @@ function getBlendGrid() {
   }
 
   let d = Math.max(2, dominant.tessDivisions || 2);
-
-  // fewer divisions = bigger collage blocks
-  // more divisions = smaller collage blocks
   d = constrain(d, 6, 36);
 
   return {
@@ -549,18 +546,10 @@ function drawLayerTile(g, layer, gx, gy, cellW, cellH, blendCols, blendRows) {
   const img = layer.tessImg || layer.img;
   if (!img) return;
 
-  const zoom = Math.max(0.01, layer.tileScale);
-
-  const sampleW = img.width / zoom;
-  const sampleH = img.height / zoom;
-
-  const offsetX = (img.width - sampleW) * 0.5;
-  const offsetY = (img.height - sampleH) * 0.5;
-
-  const sx0 = Math.floor(offsetX + (gx / blendCols) * sampleW);
-  const sy0 = Math.floor(offsetY + (gy / blendRows) * sampleH);
-  const sx1 = Math.floor(offsetX + ((gx + 1) / blendCols) * sampleW);
-  const sy1 = Math.floor(offsetY + ((gy + 1) / blendRows) * sampleH);
+  const sx0 = Math.floor((gx / blendCols) * img.width);
+  const sy0 = Math.floor((gy / blendRows) * img.height);
+  const sx1 = Math.floor(((gx + 1) / blendCols) * img.width);
+  const sy1 = Math.floor(((gy + 1) / blendRows) * img.height);
 
   const sw = Math.max(1, sx1 - sx0);
   const sh = Math.max(1, sy1 - sy0);
