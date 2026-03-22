@@ -531,7 +531,10 @@ function renderComposite() {
 }
 
 function pickLayerForCell(gx, gy, activeLayers) {
-  const r = hash2D(gx, gy);
+  const shiftX = Math.floor(blendPos * 100);
+  const shiftY = Math.floor(blendPos * 137);
+
+  const r = hash2D(gx + shiftX, gy + shiftY);
 
   let acc = 0;
   for (const layer of activeLayers) {
