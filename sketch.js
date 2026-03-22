@@ -183,7 +183,7 @@ function mouseWheel(event) {
   if (active.length <= 1) return false;
 
   blendPos += event.delta > 0 ? blendStep : -blendStep;
-  blendPos = constrain(blendPos, 0, Math.max(0, active.length - 1));
+  blendPos = wrapBlendPos(blendPos, active.length);
 
   updateWeights();
   updateAudioMix();
@@ -196,22 +196,17 @@ function mouseWheel(event) {
 function keyPressed() {
   if (key === "s" || key === "S") {
     saveCanvas(cachedG, "urban_tessellation", "png");
+    return;
   }
 
   if (keyCode === RIGHT_ARROW) {
-    blendPos = constrain(blendPos + blendStep, 0, Math.max(0, getActiveLayers().length - 1));
-    updateWeights();
-    updateAudioMix();
-    updateInfoLabel();
-    markDirty();
+    adjustDominantLayerTessellation(2);
+    return;
   }
 
   if (keyCode === LEFT_ARROW) {
-    blendPos = constrain(blendPos - blendStep, 0, Math.max(0, getActiveLayers().length - 1));
-    updateWeights();
-    updateAudioMix();
-    updateInfoLabel();
-    markDirty();
+    adjustDominantLayerTessellation(-2);
+    return;
   }
 }
 
@@ -289,7 +284,7 @@ function setupUI() {
   titleLabel.style("font-weight", "bold");
   titleLabel.style("text-align", "center");
 
-  hintLabel = createDiv("Toggle strata. Scroll to shift the blend.");
+  hintLabel = createDiv("Toggle strata. Scroll to shift the blend. Left and right arrows change tessellation.");
   hintLabel.parent(uiWrap);
   hintLabel.style("font-size", "13px");
   hintLabel.style("text-align", "center");
@@ -314,7 +309,7 @@ function setupUI() {
         layer.enabled = true;
       }
 
-      blendPos = constrain(blendPos, 0, Math.max(0, getActiveLayers().length - 1));
+      blendPos = wrapBlendPos(blendPos, Math.max(1, getActiveLayers().length));
 
       updateWeights();
       updateButtonStyles();
@@ -366,22 +361,43 @@ function getActiveLayers() {
   return layers.filter(layer => layer.enabled);
 }
 
+function getDominantActiveLayer() {
+  const active = getActiveLayers();
+  if (active.length === 0) return null;
+
+  let dominant = active[0];
+  for (const layer of active) {
+    if (layer.weight > dominant.weight) {
+      dominant = layer;
+    }
+  }
+  return dominant;
+}
+
+function wrapBlendPos(pos, count) {
+  if (count <= 0) return 0;
+  return ((pos % count) + count) % count;
+}
+
 function updateWeights() {
   const active = getActiveLayers();
-  if (active.length === 0) return;
+  const count = active.length;
+  if (count === 0) return;
 
   for (const layer of layers) {
     layer.weight = 0;
     layer.volume = 0;
   }
 
-  blendPos = constrain(blendPos, 0, Math.max(0, active.length - 1));
+  blendPos = wrapBlendPos(blendPos, count);
 
   let total = 0;
 
-  for (let i = 0; i < active.length; i++) {
-    const distance = abs(blendPos - i);
-    const w = max(0, 1 - distance);
+  for (let i = 0; i < count; i++) {
+    const directDist = Math.abs(blendPos - i);
+    const circularDist = Math.min(directDist, count - directDist);
+    const w = Math.max(0, 1 - circularDist);
+
     active[i].weight = w;
     total += w;
   }
@@ -397,6 +413,25 @@ function updateWeights() {
   }
 }
 
+function adjustDominantLayerTessellation(delta) {
+  const layer = getDominantActiveLayer();
+  if (!layer) return;
+
+  layer.tessDivisions = Math.max(0, layer.tessDivisions + delta);
+  layer.tessDivisions = Math.floor(layer.tessDivisions / 2) * 2;
+
+  rebuildSingleLayer(layer);
+  updateInfoLabel();
+  markDirty();
+}
+
+function rebuildSingleLayer(layer) {
+  if (!layer.img) return;
+
+  layer.squareImg = cropCenterSquare(layer.img);
+  layer.tessImg = buildLayerTessellation(layer.squareImg, layer.tessDivisions);
+}
+
 function updateInfoLabel() {
   const active = getActiveLayers();
   if (active.length === 0) {
@@ -404,12 +439,20 @@ function updateInfoLabel() {
     return;
   }
 
+  const dominant = getDominantActiveLayer();
+
+  let text = "";
+  if (dominant) {
+    text += `Editing: ${dominant.label}<br>`;
+    text += `Tessellation: ${dominant.tessDivisions}<br><br>`;
+  }
+
   const lines = active.map(layer => {
     const pct = Math.round(layer.weight * 100);
     return `${layer.label}: ${pct}%`;
   });
 
-  infoLabel.html(lines.join("<br>"));
+  infoLabel.html(text + lines.join("<br>"));
 }
 
 /* ---------------- Rendering ---------------- */
