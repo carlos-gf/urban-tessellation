@@ -22,6 +22,9 @@ const layers = [
     snd: null,
     enabled: true,
     tileScale: 1.45,
+    tessDivisions: 24,
+    squareImg: null,
+    tessImg: null,
     weight: 0,
     volume: 0,
     button: null
@@ -35,6 +38,9 @@ const layers = [
     snd: null,
     enabled: true,
     tileScale: 1.0,
+    tessDivisions: 18,
+    squareImg: null,
+    tessImg: null,
     weight: 0,
     volume: 0,
     button: null
@@ -48,6 +54,9 @@ const layers = [
     snd: null,
     enabled: true,
     tileScale: 0.8,
+    tessDivisions: 32,
+    squareImg: null,
+    tessImg: null,
     weight: 0,
     volume: 0,
     button: null
@@ -61,6 +70,9 @@ const layers = [
     snd: null,
     enabled: true,
     tileScale: 0.65,
+    tessDivisions: 40,
+    squareImg: null,
+    tessImg: null,
     weight: 0,
     volume: 0,
     button: null
@@ -74,6 +86,9 @@ const layers = [
     snd: null,
     enabled: true,
     tileScale: 0.95,
+    tessDivisions: 14,
+    squareImg: null,
+    tessImg: null,
     weight: 0,
     volume: 0,
     button: null
@@ -87,6 +102,9 @@ const layers = [
     snd: null,
     enabled: true,
     tileScale: 1.2,
+    tessDivisions: 22,
+    squareImg: null,
+    tessImg: null,
     weight: 0,
     volume: 0,
     button: null
@@ -128,6 +146,8 @@ function setup() {
 
   const cnv = document.querySelector("canvas");
   cnv.style.touchAction = "none";
+
+  buildAllLayerTessellations();
 
   updateWeights();
   updateButtonStyles();
@@ -197,8 +217,11 @@ function keyPressed() {
 
 function windowResized() {
   applyResponsiveLayout();
+  buildAllLayerTessellations();
   markDirty();
 }
+
+/* ---------------- Layout ---------------- */
 
 function setupPage() {
   document.body.style.margin = "0";
@@ -250,6 +273,8 @@ function applyResponsiveLayout() {
   cachedG.noSmooth();
 }
 
+/* ---------------- UI ---------------- */
+
 function setupUI() {
   uiWrap = createDiv();
   uiWrap.parent(container);
@@ -285,7 +310,6 @@ function setupUI() {
     btn.mousePressed(() => {
       layer.enabled = !layer.enabled;
 
-      // Prevent zero active layers
       if (getActiveLayers().length === 0) {
         layer.enabled = true;
       }
@@ -328,6 +352,8 @@ function styleControl(el) {
   el.elt.style.webkitTapHighlightColor = "transparent";
   el.elt.style.userSelect = "none";
 }
+
+/* ---------------- Layer state ---------------- */
 
 function updateButtonStyles() {
   for (const layer of layers) {
@@ -386,6 +412,8 @@ function updateInfoLabel() {
   infoLabel.html(lines.join("<br>"));
 }
 
+/* ---------------- Rendering ---------------- */
+
 function renderComposite() {
   cachedG.background(255);
   cachedG.noStroke();
@@ -417,7 +445,7 @@ function pickLayerForCell(gx, gy, activeLayers) {
 }
 
 function drawLayerTile(g, layer, gx, gy, cellW, cellH) {
-  const img = layer.img;
+  const img = layer.tessImg || layer.img;
   if (!img) return;
 
   const scaledCols = max(1, floor(GRID_COLS * layer.tileScale));
@@ -447,12 +475,160 @@ function drawLayerTile(g, layer, gx, gy, cellW, cellH) {
   );
 }
 
-function hash2D(x, y) {
-  let n = x * 374761393 + y * 668265263;
-  n = (n ^ (n >> 13)) * 1274126177;
-  n = n ^ (n >> 16);
-  return abs(n % 100000) / 100000;
+/* ---------------- Tessellation build ---------------- */
+
+function buildAllLayerTessellations() {
+  for (const layer of layers) {
+    if (!layer.img) continue;
+
+    layer.squareImg = cropCenterSquare(layer.img);
+    layer.tessImg = buildLayerTessellation(layer.squareImg, layer.tessDivisions);
+  }
 }
+
+function buildLayerTessellation(img, divisions) {
+  const base = fitSquareImage(img, width);
+
+  if (divisions <= 0) {
+    return base;
+  }
+
+  if (divisions === 2) {
+    return renderMirroredSquare(base);
+  }
+
+  const mirrored = renderMirroredSquare(base);
+  const v = reorderVerticalStripes(mirrored, divisions);
+  const out = reorderHorizontalStripes(v, divisions);
+  return out;
+}
+
+function fitSquareImage(img, side) {
+  const g = createGraphics(side, side);
+  g.noSmooth();
+  g.background(255);
+  g.imageMode(CENTER);
+
+  const s = min(side / img.width, side / img.height);
+  g.image(img, side / 2, side / 2, img.width * s, img.height * s);
+
+  return g.get();
+}
+
+function cropCenterSquare(img) {
+  const s = min(img.width, img.height);
+  const x = floor((img.width - s) / 2);
+  const y = floor((img.height - s) / 2);
+
+  const out = createImage(s, s);
+  out.copy(img, x, y, s, s, 0, 0, s, s);
+  return out;
+}
+
+function renderMirroredSquare(img) {
+  const qW = floor(img.width / 2);
+  const qH = floor(img.height / 2);
+
+  const fit = fitIntoRect(img, qW, qH);
+
+  const g = createGraphics(img.width, img.height);
+  g.noSmooth();
+  g.background(255);
+
+  g.image(fit, 0, 0);
+  g.image(mirrorH(fit), qW, 0);
+  g.image(mirrorV(fit), 0, qH);
+  g.image(mirrorV(mirrorH(fit)), qW, qH);
+
+  return g.get();
+}
+
+function fitIntoRect(img, w, h) {
+  const g = createGraphics(w, h);
+  g.noSmooth();
+  g.background(255);
+  g.imageMode(CENTER);
+
+  const s = min(w / img.width, h / img.height);
+  g.image(img, w / 2, h / 2, img.width * s, img.height * s);
+
+  return g.get();
+}
+
+function mirrorH(img) {
+  const g = createGraphics(img.width, img.height);
+  g.noSmooth();
+  g.translate(img.width, 0);
+  g.scale(-1, 1);
+  g.image(img, 0, 0);
+  return g.get();
+}
+
+function mirrorV(img) {
+  const g = createGraphics(img.width, img.height);
+  g.noSmooth();
+  g.translate(0, img.height);
+  g.scale(1, -1);
+  g.image(img, 0, 0);
+  return g.get();
+}
+
+function alternatingEndsOrder(n) {
+  const order = [];
+  let l = 0;
+  let r = n - 1;
+
+  while (l <= r) {
+    order.push(l++);
+    if (l <= r) order.push(r--);
+  }
+
+  return order;
+}
+
+function reorderVerticalStripes(src, n) {
+  const g = createGraphics(src.width, src.height);
+  g.noSmooth();
+  g.background(255);
+
+  let dx = 0;
+  const order = alternatingEndsOrder(n);
+
+  for (let i = 0; i < n; i++) {
+    const id = order[i];
+    const x0 = round(id * src.width / n);
+    const x1 = round((id + 1) * src.width / n);
+    const w = max(1, x1 - x0);
+
+    g.copy(src, x0, 0, w, src.height, dx, 0, w, src.height);
+    dx += w;
+  }
+
+  return g.get();
+}
+
+function reorderHorizontalStripes(src, n) {
+  const g = createGraphics(src.width, src.height);
+  g.noSmooth();
+  g.background(255);
+
+  let dy = 0;
+  const order = alternatingEndsOrder(n);
+
+  for (let i = 0; i < n; i++) {
+    const id = order[i];
+    const y0 = round(id * src.height / n);
+    const y1 = round((id + 1) * src.height / n);
+    const h = max(1, y1 - y0);
+
+    g.copy(src, 0, y0, src.width, h, 0, dy, src.width, h);
+    dy += h;
+  }
+
+  return g.get();
+}
+
+/* ---------------- Audio ---------------- */
 
 function startAudioIfNeeded() {
   if (audioStarted) return;
@@ -463,7 +639,7 @@ function startAudioIfNeeded() {
     if (layer.snd && !layer.snd.isPlaying()) {
       layer.snd.setLoop(true);
       layer.snd.setVolume(0, 0);
-      layer.snd.play();
+      layer.snd.play(0, 1, 0, random(0, layer.snd.duration()));
     }
   }
 
@@ -492,6 +668,15 @@ function drawAudioHint() {
   textSize(13);
   text("Click to activate sound", width / 2, height - 18);
   pop();
+}
+
+/* ---------------- Utilities ---------------- */
+
+function hash2D(x, y) {
+  let n = x * 374761393 + y * 668265263;
+  n = (n ^ (n >> 13)) * 1274126177;
+  n = n ^ (n >> 16);
+  return abs(n % 100000) / 100000;
 }
 
 function markDirty() {
