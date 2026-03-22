@@ -8,9 +8,6 @@ let blendStep = 0.04;
 let cachedG;
 let dirty = true;
 
-const GRID_COLS = 30;
-const GRID_ROWS = 30;
-
 // Ordered from structural to organic
 const layers = [
   {
@@ -217,7 +214,6 @@ function keyPressed() {
     return;
   }
 
-  // Right / Left adjust tessellation of dominant layer
   if (keyCode === RIGHT_ARROW) {
     adjustDominantLayerTessellation(2);
     return;
@@ -228,7 +224,6 @@ function keyPressed() {
     return;
   }
 
-  // Down / Up behave like scroll
   if (keyCode === DOWN_ARROW) {
     blendPos += blendStep;
     blendPos = wrapBlendPos(blendPos, count);
@@ -495,6 +490,25 @@ function updateInfoLabel() {
   infoLabel.html(text + lines.join("<br>"));
 }
 
+function getBlendGrid() {
+  const dominant = getDominantActiveLayer();
+
+  if (!dominant) {
+    return { cols: 12, rows: 12 };
+  }
+
+  let d = Math.max(2, dominant.tessDivisions || 2);
+
+  // fewer divisions = bigger collage blocks
+  // more divisions = smaller collage blocks
+  d = constrain(d, 6, 36);
+
+  return {
+    cols: d,
+    rows: d
+  };
+}
+
 /* ---------------- Rendering ---------------- */
 
 function renderComposite() {
@@ -504,13 +518,17 @@ function renderComposite() {
   const active = getActiveLayers();
   if (active.length === 0) return;
 
-  const cellW = width / GRID_COLS;
-  const cellH = height / GRID_ROWS;
+  const grid = getBlendGrid();
+  const cols = grid.cols;
+  const rows = grid.rows;
 
-  for (let gy = 0; gy < GRID_ROWS; gy++) {
-    for (let gx = 0; gx < GRID_COLS; gx++) {
+  const cellW = width / cols;
+  const cellH = height / rows;
+
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
       const layer = pickLayerForCell(gx, gy, active);
-      drawLayerTile(cachedG, layer, gx, gy, cellW, cellH);
+      drawLayerTile(cachedG, layer, gx, gy, cellW, cellH, cols, rows);
     }
   }
 }
@@ -527,23 +545,25 @@ function pickLayerForCell(gx, gy, activeLayers) {
   return activeLayers[activeLayers.length - 1];
 }
 
-function drawLayerTile(g, layer, gx, gy, cellW, cellH) {
+function drawLayerTile(g, layer, gx, gy, cellW, cellH, blendCols, blendRows) {
   const img = layer.tessImg || layer.img;
   if (!img) return;
 
-  const scaledCols = max(1, floor(GRID_COLS * layer.tileScale));
-  const scaledRows = max(1, floor(GRID_ROWS * layer.tileScale));
+  const zoom = Math.max(0.01, layer.tileScale);
 
-  const localX = gx % scaledCols;
-  const localY = gy % scaledRows;
+  const sampleW = img.width / zoom;
+  const sampleH = img.height / zoom;
 
-  const sx0 = floor((localX / scaledCols) * img.width);
-  const sy0 = floor((localY / scaledRows) * img.height);
-  const sx1 = floor(((localX + 1) / scaledCols) * img.width);
-  const sy1 = floor(((localY + 1) / scaledRows) * img.height);
+  const offsetX = (img.width - sampleW) * 0.5;
+  const offsetY = (img.height - sampleH) * 0.5;
 
-  const sw = max(1, sx1 - sx0);
-  const sh = max(1, sy1 - sy0);
+  const sx0 = Math.floor(offsetX + (gx / blendCols) * sampleW);
+  const sy0 = Math.floor(offsetY + (gy / blendRows) * sampleH);
+  const sx1 = Math.floor(offsetX + ((gx + 1) / blendCols) * sampleW);
+  const sy1 = Math.floor(offsetY + ((gy + 1) / blendRows) * sampleH);
+
+  const sw = Math.max(1, sx1 - sx0);
+  const sh = Math.max(1, sy1 - sy0);
 
   g.copy(
     img,
@@ -553,8 +573,8 @@ function drawLayerTile(g, layer, gx, gy, cellW, cellH) {
     sh,
     gx * cellW,
     gy * cellH,
-    ceil(cellW),
-    ceil(cellH)
+    Math.ceil(cellW),
+    Math.ceil(cellH)
   );
 }
 
