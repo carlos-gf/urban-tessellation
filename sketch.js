@@ -24,7 +24,10 @@ const layers = [
     tessImg: null,
     weight: 0,
     volume: 0,
-    button: null
+    button: null,
+    reverb: null,
+    delay: null,
+    filter: null
   },
   {
     id: "surface",
@@ -40,7 +43,10 @@ const layers = [
     tessImg: null,
     weight: 0,
     volume: 0,
-    button: null
+    button: null,
+    reverb: null,
+    delay: null,
+    filter: null
   },
   {
     id: "reflection",
@@ -56,7 +62,10 @@ const layers = [
     tessImg: null,
     weight: 0,
     volume: 0,
-    button: null
+    button: null,
+    reverb: null,
+    delay: null,
+    filter: null
   },
   {
     id: "illumination",
@@ -72,7 +81,10 @@ const layers = [
     tessImg: null,
     weight: 0,
     volume: 0,
-    button: null
+    button: null,
+    reverb: null,
+    delay: null,
+    filter: null
   },
   {
     id: "water",
@@ -88,7 +100,10 @@ const layers = [
     tessImg: null,
     weight: 0,
     volume: 0,
-    button: null
+    button: null,
+    reverb: null,
+    delay: null,
+    filter: null
   },
   {
     id: "vegetation",
@@ -104,7 +119,10 @@ const layers = [
     tessImg: null,
     weight: 0,
     volume: 0,
-    button: null
+    button: null,
+    reverb: null,
+    delay: null,
+    filter: null
   }
 ];
 
@@ -145,6 +163,7 @@ function setup() {
   cnv.style.touchAction = "none";
 
   buildAllLayerTessellations();
+  setupAudioEffects();
 
   updateWeights();
   updateButtonStyles();
@@ -456,6 +475,7 @@ function adjustDominantLayerTessellation(delta) {
   layer.tessDivisions = Math.floor(layer.tessDivisions / 2) * 2;
 
   rebuildSingleLayer(layer);
+  updateLayerAudioEffects(layer);
   updateInfoLabel();
   markDirty();
 }
@@ -721,6 +741,48 @@ function reorderHorizontalStripes(src, n) {
 }
 
 /* ---------------- Audio ---------------- */
+
+function setupAudioEffects() {
+  for (const layer of layers) {
+    if (!layer.snd) continue;
+
+    layer.reverb = new p5.Reverb();
+    layer.delay = new p5.Delay();
+    layer.filter = new p5.LowPass();
+
+    layer.snd.disconnect();
+    layer.snd.connect(layer.filter);
+
+    layer.reverb.process(layer.filter, 1.5, 1.5);
+    layer.delay.process(layer.filter, 0.12, 0.2, 1200);
+
+    updateLayerAudioEffects(layer);
+  }
+}
+
+function normalizeTessellation(divisions) {
+  return constrain(map(divisions, 0, 40, 0, 1), 0, 1);
+}
+
+function updateLayerAudioEffects(layer) {
+  if (!layer.filter || !layer.reverb || !layer.delay) return;
+
+  const t = normalizeTessellation(layer.tessDivisions);
+
+  const cutoff = lerp(6000, 1200, t);
+  const reverbTime = lerp(0.8, 4.5, t);
+  const reverbDecay = lerp(1.0, 3.0, t);
+  const delayTime = lerp(0.05, 0.22, t);
+  const delayFeedback = lerp(0.05, 0.35, t);
+
+  layer.filter.freq(cutoff);
+  layer.filter.res(1.5);
+
+  layer.reverb.set(reverbTime, reverbDecay);
+  layer.delay.delayTime(delayTime);
+  layer.delay.feedback(delayFeedback);
+  layer.delay.filter(cutoff);
+}
 
 function startAudioIfNeeded() {
   if (audioStarted) return;
