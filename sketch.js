@@ -18,10 +18,10 @@ let loadedAssets = 0;
 // autonomous mode timing
 let lastAutoMs = 0;
 let lastAutoTessMs = 0;
-const autoBlendIntervalMs = 80;
-const autoTessIntervalMin = 1400;
-const autoTessIntervalMax = 2600;
-let nextAutoTessMs = 1800;
+const autoBlendIntervalMs = 120;
+const autoTessIntervalMin = 2200;
+const autoTessIntervalMax = 4200;
+let nextAutoTessMs = 2600;
 
 // Ordered from structural to organic
 const layers = [
@@ -409,7 +409,7 @@ function updateAutonomousMode() {
   const now = millis();
 
   if (now - lastAutoMs >= autoBlendIntervalMs) {
-    blendPos += blendStep * 0.55;
+    blendPos += blendStep * 0.22;
     blendPos = wrapBlendPos(blendPos, active.length);
 
     updateWeights();
@@ -421,19 +421,26 @@ function updateAutonomousMode() {
   }
 
   if (now - lastAutoTessMs >= nextAutoTessMs) {
-    const dominant = getDominantActiveLayer();
-    if (dominant) {
-      const deltas = [-4, -2, 2, 4];
-      const delta = random(deltas);
-      dominant.tessDivisions = Math.max(0, dominant.tessDivisions + delta);
-      dominant.tessDivisions = Math.floor(dominant.tessDivisions / 2) * 2;
-      dominant.tessDivisions = constrain(dominant.tessDivisions, 0, 48);
+    const activeLayers = getActiveLayers();
 
-      rebuildSingleLayer(dominant);
-      updateLayerAudioEffects(dominant);
-      updateLayerRows();
-      markDirty();
+    for (const layer of activeLayers) {
+      const chance = map(layer.weight, 0, 1, 0.25, 1.0);
+
+      if (random() < chance) {
+        const deltas = [-10, -8, -6, 6, 8, 10];
+        const delta = random(deltas);
+
+        layer.tessDivisions += delta;
+        layer.tessDivisions = Math.floor(layer.tessDivisions / 2) * 2;
+        layer.tessDivisions = constrain(layer.tessDivisions, 4, 44);
+
+        rebuildSingleLayer(layer);
+        updateLayerAudioEffects(layer);
+      }
     }
+
+    updateLayerRows();
+    markDirty();
 
     lastAutoTessMs = now;
     nextAutoTessMs = random(autoTessIntervalMin, autoTessIntervalMax);
